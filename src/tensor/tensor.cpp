@@ -164,27 +164,133 @@ void Tensor::debug() const {
 }
 
 bool Tensor::isContiguous() const {
-    TO_BE_IMPLEMENTED();
+    auto &shape_ = shape();
+    auto &strides_ = strides();
+    ptrdiff_t expected_stride = 1;
+    for(int i = ndim() - 1; i >= 0; i--){
+        if(strides_[i] != expected_stride){
+            return false;
+        }
+        expected_stride *= shape_[i];
+    }
     return true;
 }
 
 tensor_t Tensor::permute(const std::vector<size_t> &order) const {
-    TO_BE_IMPLEMENTED();
-    return std::shared_ptr<Tensor>(new Tensor(_meta, _storage));
+    ASSERT(order.size() == shape().size(), "Tensor::permute: The number of dimensions in the order vector unequal to tensor dimensions");
+    TensorMeta new_meta;
+    new_meta.dtype = _meta.dtype;
+
+    auto &old_shape = shape();
+    auto &old_strides = strides();
+    new_meta.shape.resize(old_shape.size());
+    new_meta.strides.resize(old_strides.size());
+    for(size_t i=0;i<old_shape.size();i++){
+        ASSERT(order[i] < old_shape.size(), "Tensor::permute: Dimension index out of range");
+        new_meta.shape[i] = old_shape[order[i]];
+        new_meta.strides[i] = old_strides[order[i]];
+    }
+    return std::shared_ptr<Tensor>(new Tensor(new_meta, _storage, _offset));
+}
+
+std::string vec_to_string(const std::vector<size_t>& vec) {
+    std::string s = "(";
+    for(size_t i=0; i<vec.size(); ++i) s += std::to_string(vec[i]) + (i==vec.size()-1 ? "" : ", ");
+    return s + ")";
 }
 
 tensor_t Tensor::view(const std::vector<size_t> &shape) const {
-    TO_BE_IMPLEMENTED();
-    return std::shared_ptr<Tensor>(new Tensor(_meta, _storage));
+    size_t numel_new = 1;
+    for (auto s: shape){
+        numel_new *= s;
+    }
+    if(numel_new != numel()){
+        std::string msg = "[ERROR] Tensor::view: element count mismatch. Original: " + 
+                            std::to_string(numel()) + ", Target: " + std::to_string(numel_new);
+        throw std::runtime_error(msg);
+    }
+    
+    //View
+    struct Block { size_t size; ptrdiff_t stride; };
+    std::vector<Block> blocks;
+    const auto &old_shape = this->shape();
+    const auto &old_strides = this->strides();
+
+    for (size_t i = 0; i < old_shape.size(); ++i) {
+        if (old_shape[i] == 1) continue; 
+
+        // old_strides[i] * old_shape[i] == stride : contigous
+        if (!blocks.empty() && (ptrdiff_t)(old_shape[i] * old_strides[i]) == blocks.back().stride) {
+            blocks.back().size *= old_shape[i];
+            blocks.back().stride = old_strides[i];
+        } else {
+            blocks.push_back({old_shape[i], old_strides[i]});
+        }
+    }
+
+    // case: {1,1,1}
+    if (blocks.empty() && numel_new > 0) {
+        blocks.push_back({1, 1});
+    }
+
+    // allocate block for new shape
+    std::vector<ptrdiff_t> new_strides(shape.size());
+    size_t block_idx = 0;
+    
+    for (size_t i = 0; i < shape.size(); ++i) {
+        size_t target_size = shape[i];
+        if (target_size == 1) {
+            new_strides[i] = (block_idx < blocks.size()) ? blocks[block_idx].stride : 1;
+            continue;
+        }
+
+        if (block_idx >= blocks.size() || blocks[block_idx].size % target_size != 0) {
+            throw std::runtime_error("[ERROR] Tensor::view: input is not contiguous enough to form the target shape.");
+        }
+
+        // new stride = (leftsize / targetDim) * block stride
+        blocks[block_idx].size /= target_size;
+        new_strides[i] = (ptrdiff_t)blocks[block_idx].size * blocks[block_idx].stride;
+
+        // next block
+        if (blocks[block_idx].size == 1) {
+            block_idx++;
+        }
+    }
+
+    TensorMeta new_meta{this->dtype(), shape, new_strides};
+    return std::shared_ptr<Tensor>(new Tensor(new_meta, _storage, this->_offset));
 }
 
 tensor_t Tensor::slice(size_t dim, size_t start, size_t end) const {
-    TO_BE_IMPLEMENTED();
-    return std::shared_ptr<Tensor>(new Tensor(_meta, _storage));
+    ASSERT(dim<ndim(), "Tensor::slice: dim exceed tensor dimensions");
+    ASSERT(start >= 0 && end <= shape()[dim] && end >= start, "Tensor:slice: invalid slice range");
+    TensorMeta new_meta = _meta;
+    new_meta.shape[dim] = end - start;
+    size_t new_offset = _offset + start * strides()[dim] * elementSize();
+    return std::shared_ptr<Tensor>(new Tensor(new_meta, _storage, new_offset));
 }
 
 void Tensor::load(const void *src_) {
-    TO_BE_IMPLEMENTED();
+    // TO_BE_IMPLEMENTED();
+    CHECK_ARGUMENT((src_ != nullptr), " source pointer is null");
+    ASSERT(isContiguous(), "Tensor::load: tensor is not contigous");
+    
+    int bytes = numel() * elementSize();
+    ASSERT(bytes + _offset <= _storage->size(), "Tensor::load: load size exceeds storage");
+
+    std::byte *dst = data();
+    if(_storage->isHost()){
+        std::memcpy(dst, src_, bytes);
+    }else{
+        core::context().runtime().api()->memcpy_sync(
+            dst,
+            src_, 
+            bytes,
+            LLAISYS_MEMCPY_H2D
+        );
+    }
+    return;
 }
 
 tensor_t Tensor::contiguous() const {
