@@ -167,7 +167,7 @@ bool Tensor::isContiguous() const {
     auto &shape_ = shape();
     auto &strides_ = strides();
     ptrdiff_t expected_stride = 1;
-    for(int i = ndim() - 1; i >= 0; i--){
+    for(size_t i = ndim() - 1; i >= 0; i--){
         if(strides_[i] != expected_stride){
             return false;
         }
@@ -276,7 +276,7 @@ void Tensor::load(const void *src_) {
     CHECK_ARGUMENT((src_ != nullptr), " source pointer is null");
     ASSERT(isContiguous(), "Tensor::load: tensor is not contigous");
     
-    int bytes = numel() * elementSize();
+    size_t bytes = numel() * elementSize();
     ASSERT(bytes + _offset <= _storage->size(), "Tensor::load: load size exceeds storage");
 
     std::byte *dst = data();
