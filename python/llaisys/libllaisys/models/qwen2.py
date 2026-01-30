@@ -1,0 +1,64 @@
+from ctypes import c_int, c_int64, c_size_t
+from ..llaisys_types import llaisysDeviceType_t, llaisysDataType_t
+from ..tensor import llaisysTensor_t
+import ctypes
+
+class Qwen2Meta(ctypes.Structure):
+    _fields_ = [
+        ("dtype", llaisysDataType_t),
+        ("nlayer", ctypes.c_size_t),
+        ("hs", ctypes.c_size_t),
+        ("nh", ctypes.c_size_t),
+        ("nkvh", ctypes.c_size_t),
+        ("dh", ctypes.c_size_t),
+        ("di", ctypes.c_size_t),
+        ("maxseq", ctypes.c_size_t),
+        ("voc", ctypes.c_size_t),
+        ("epsilon", ctypes.c_float),
+        ("theta", ctypes.c_float),
+        ("end_token", ctypes.c_int64)
+    ]
+
+class Qwen2Weights(ctypes.Structure):
+    _fields_ = [
+        ("in_embed",      llaisysTensor_t),
+        ("out_embed",     llaisysTensor_t),
+        ("out_norm_w",    llaisysTensor_t),
+
+        ("attn_norm_w",   ctypes.POINTER(llaisysTensor_t)),
+        ("attn_q_w",      ctypes.POINTER(llaisysTensor_t)),
+        ("attn_q_b",      ctypes.POINTER(llaisysTensor_t)),
+        ("attn_k_w",      ctypes.POINTER(llaisysTensor_t)),
+        ("attn_k_b",      ctypes.POINTER(llaisysTensor_t)),
+        ("attn_v_w",      ctypes.POINTER(llaisysTensor_t)),
+        ("attn_v_b",      ctypes.POINTER(llaisysTensor_t)),
+        ("attn_o_w",      ctypes.POINTER(llaisysTensor_t)),
+
+        ("mlp_norm_w",    ctypes.POINTER(llaisysTensor_t)),
+        ("mlp_gate_w",    ctypes.POINTER(llaisysTensor_t)),
+        ("mlp_up_w",      ctypes.POINTER(llaisysTensor_t)),
+        ("mlp_down_w",    ctypes.POINTER(llaisysTensor_t)),
+    ]
+
+class Qwen2Model(ctypes.Structure):
+    _fields_ = [
+        ("meta", ctypes.POINTER(Qwen2Meta)),
+        ("device", ctypes.c_int),  
+        ("ndevice", ctypes.c_int),
+        ("device_ids", ctypes.POINTER(ctypes.c_int)),
+        ("weights", ctypes.POINTER(Qwen2Weights)),
+    ]
+
+def load_qwen2(lib):
+    # Declare API function prototypes
+    lib.llaisysQwen2ModelCreate.argtypes = [ctypes.POINTER(Qwen2Meta), llaisysDeviceType_t, ctypes.POINTER(c_int), c_int]
+    lib.llaisysQwen2ModelCreate.restype = ctypes.POINTER(Qwen2Model)
+
+    lib.llaisysQwen2ModelDestroy.argtypes = [ctypes.POINTER(Qwen2Model)]
+    lib.llaisysQwen2ModelDestroy.restype = None
+
+    lib.llaisysQwen2ModelWeights.argtypes = [ctypes.POINTER(Qwen2Model)]
+    lib.llaisysQwen2ModelWeights.restype = ctypes.POINTER(Qwen2Weights)
+
+    lib.llaisysQwen2ModelInfer.argtypes = [ctypes.POINTER(Qwen2Model), ctypes.POINTER(c_int64), c_size_t]
+    lib.llaisysQwen2ModelInfer.restype = c_int64

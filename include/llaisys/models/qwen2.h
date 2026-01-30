@@ -12,24 +12,31 @@ __C {
     };
 
     struct LlaisysQwen2Weights {
-        llaisysTensor_t in_embed;
-        llaisysTensor_t out_embed;
-        llaisysTensor_t out_norm_w;   // a.k.a. model.norm.weight
-        llaisysTensor_t *attn_norm_w; // a.k.a. input_layernorm.weight
-        llaisysTensor_t *attn_q_w;
-        llaisysTensor_t *attn_q_b;
-        llaisysTensor_t *attn_k_w;
-        llaisysTensor_t *attn_k_b;
-        llaisysTensor_t *attn_v_w;
-        llaisysTensor_t *attn_v_b;
-        llaisysTensor_t *attn_o_w;
-        llaisysTensor_t *mlp_norm_w; // a.k.a. post_attention_layernorm.weight
-        llaisysTensor_t *mlp_gate_w;
-        llaisysTensor_t *mlp_up_w;
-        llaisysTensor_t *mlp_down_w;
+        llaisysTensor_t in_embed;      //[voc, hs]
+        llaisysTensor_t out_embed;     //[voc, hs], at the end of the generate, calculate out(1,hs) * out_embed^T
+        llaisysTensor_t out_norm_w;    // a.k.a. model.norm.weight, [hs]
+        llaisysTensor_t *attn_norm_w;  // a.k.a. input_layernorm.weight, [hs]
+        llaisysTensor_t *attn_q_w;     //[nh * dh, hs]
+        llaisysTensor_t *attn_q_b;     //[nh * dh]
+        llaisysTensor_t *attn_k_w;     //[nkvh*dh, hs]
+        llaisysTensor_t *attn_k_b;     //[nkvh*dh]
+        llaisysTensor_t *attn_v_w;     //[nkvh*dh, hs]
+        llaisysTensor_t *attn_v_b;     //[nkvh * dh]
+        llaisysTensor_t *attn_o_w;     //[hs, nh*dh]
+        llaisysTensor_t *mlp_norm_w; // a.k.a. post_attention_layernorm.weight,[hs]
+        llaisysTensor_t *mlp_gate_w;    //[di, hs]
+        llaisysTensor_t *mlp_up_w;      //[di, hs]
+        llaisysTensor_t *mlp_down_w;    //[hs, di]
     };
 
-    struct LlaisysQwen2Model;
+    struct LlaisysQwen2Model{
+        struct LlaisysQwen2Meta *meta;
+        struct LlaisysQwen2Weights *weights;
+        llaisysDeviceType_t device;
+        int ndevice;
+        int *device_ids;
+
+    };
 
     __export struct LlaisysQwen2Model *llaisysQwen2ModelCreate(const LlaisysQwen2Meta *meta, llaisysDeviceType_t device, int *device_ids, int ndevice);
 

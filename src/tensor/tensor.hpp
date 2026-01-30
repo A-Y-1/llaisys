@@ -40,6 +40,7 @@ public:
 
     std::string info() const;
     void debug() const;
+    void shapeDebug() const;
 
     bool isContiguous() const;
 

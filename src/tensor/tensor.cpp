@@ -163,11 +163,23 @@ void Tensor::debug() const {
     }
 }
 
+void Tensor::shapeDebug() const {
+    std::cout<<"Tensor shape: [";
+    for(size_t i=0;i<this->ndim();i++){
+        std::cout <<this->shape()[i]<<" ";
+    }
+    std::cout<<"]"<<std::endl<<" stride:[";
+    for(size_t i=0;i<this->ndim();i++){
+        std::cout <<this->strides()[i]<<" ";
+    }
+    std::cout<<"]"<<std::endl;
+}
+
 bool Tensor::isContiguous() const {
     auto &shape_ = shape();
     auto &strides_ = strides();
     ptrdiff_t expected_stride = 1;
-    for(size_t i = ndim() - 1; i >= 0; i--){
+    for(int64_t i = (int64_t)ndim() - 1; i >= 0; i--){
         if(strides_[i] != expected_stride){
             return false;
         }
@@ -272,7 +284,6 @@ tensor_t Tensor::slice(size_t dim, size_t start, size_t end) const {
 }
 
 void Tensor::load(const void *src_) {
-    // TO_BE_IMPLEMENTED();
     CHECK_ARGUMENT((src_ != nullptr), " source pointer is null");
     ASSERT(isContiguous(), "Tensor::load: tensor is not contigous");
     

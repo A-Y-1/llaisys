@@ -22,10 +22,11 @@ void linear(tensor_t out, tensor_t in, tensor_t weight, tensor_t bias) {
         ASSERT(bias->isContiguous(), "Linear: all tensor must be contigous.");
         bias_ptr = bias->data();
     }
+    size_t bias_dim = bias_ptr == nullptr ? 0 : bias->ndim();
 
     switch (out->deviceType()) {
         case LLAISYS_DEVICE_CPU:
-            return cpu::linear(out->data(), in->data(), weight->data(), bias_ptr, in->shape()[0], in->shape()[1], weight->shape()[0], bias->dtype(), bias->ndim());
+            return cpu::linear(out->data(), in->data(), weight->data(), bias_ptr, in->shape()[0], in->shape()[1], weight->shape()[0], out->dtype(), bias_dim);
     #ifdef ENABLE_NVIDIA_API
         case LLAISYS_DEVICE_NVIDIA:
             TO_BE_IMPLEMENTED();

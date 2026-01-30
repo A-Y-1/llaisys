@@ -6,11 +6,23 @@
 #include <cmath>
 #include <cstring>
 
-template <typename T>
+// template <typename T>
+// void embedding_(T *out, const int64_t *index, const T *weight, const int64_t width, size_t numel) {
+//     size_t copy_size = width * sizeof(T);
+//     for(size_t i = 0; i < numel; i++){
+//         std::memcpy(out + i * width, weight + index[i] * width, copy_size);
+//     }
+// }
+
+template<typename T>
 void embedding_(T *out, const int64_t *index, const T *weight, const int64_t width, size_t numel) {
     size_t copy_size = width * sizeof(T);
+
     for(size_t i = 0; i < numel; i++){
-        std::memcpy(out + i * width, weight + index[i] * width, copy_size);
+        int64_t token_id = index[i];
+        const T* src = weight + (token_id * width);
+        T* dst = out + (i * width);
+        std::memcpy(dst, src, copy_size);
     }
 }
 

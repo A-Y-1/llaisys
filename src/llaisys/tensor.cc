@@ -60,6 +60,11 @@ __C {
         tensor->tensor->debug();
     }
 
+    void tensorShapeDebug(
+        llaisysTensor_t tensor){
+        tensor->tensor->shapeDebug();
+    }
+
     uint8_t tensorIsContiguous(
         llaisysTensor_t tensor) {
         return uint8_t(tensor->tensor->isContiguous());

@@ -42,6 +42,9 @@ __C {
     __export void tensorDebug(
         llaisysTensor_t tensor);
 
+    __export void tensorShapeDebug(
+        llaisysTensor_t tensor); 
+
     __export uint8_t tensorIsContiguous(
         llaisysTensor_t tensor);
 
