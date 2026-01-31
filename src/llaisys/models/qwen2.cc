@@ -139,8 +139,8 @@ __C {
         size_t di = model->meta->di;
         size_t voc = model->meta->voc;
         float theta = (float)model->meta->theta;
-        float epsilon = model->meta->epsilon;
-        float scale = 1.0f / sqrt(dh);
+        float epsilon = (float)model->meta->epsilon;
+        float scale = (float)(1.0f / sqrt(dh));
 
         //Embedding layer
         //printf("[Infer] Creating input tensors...\n");
