@@ -221,53 +221,16 @@ tensor_t Tensor::view(const std::vector<size_t> &shape) const {
                             std::to_string(numel()) + ", Target: " + std::to_string(numel_new);
         throw std::runtime_error(msg);
     }
-    
-    //View
-    struct Block { size_t size; ptrdiff_t stride; };
-    std::vector<Block> blocks;
-    const auto &old_shape = this->shape();
-    const auto &old_strides = this->strides();
-
-    for (size_t i = 0; i < old_shape.size(); ++i) {
-        if (old_shape[i] == 1) continue; 
-
-        // old_strides[i] * old_shape[i] == stride : contigous
-        if (!blocks.empty() && (ptrdiff_t)(old_shape[i] * old_strides[i]) == blocks.back().stride) {
-            blocks.back().size *= old_shape[i];
-            blocks.back().stride = old_strides[i];
-        } else {
-            blocks.push_back({old_shape[i], old_strides[i]});
-        }
+    if(!isContiguous()){
+        std::string msg = "[ERROR] Tensor::view: tensor must be contiguous."; 
+        throw std::runtime_error(msg);
     }
 
-    // case: {1,1,1}
-    if (blocks.empty() && numel_new > 0) {
-        blocks.push_back({1, 1});
-    }
-
-    // allocate block for new shape
     std::vector<ptrdiff_t> new_strides(shape.size());
-    size_t block_idx = 0;
-    
-    for (size_t i = 0; i < shape.size(); ++i) {
-        size_t target_size = shape[i];
-        if (target_size == 1) {
-            new_strides[i] = (block_idx < blocks.size()) ? blocks[block_idx].stride : 1;
-            continue;
-        }
-
-        if (block_idx >= blocks.size() || blocks[block_idx].size % target_size != 0) {
-            throw std::runtime_error("[ERROR] Tensor::view: input is not contiguous enough to form the target shape.");
-        }
-
-        // new stride = (leftsize / targetDim) * block stride
-        blocks[block_idx].size /= target_size;
-        new_strides[i] = (ptrdiff_t)blocks[block_idx].size * blocks[block_idx].stride;
-
-        // next block
-        if (blocks[block_idx].size == 1) {
-            block_idx++;
-        }
+    size_t stride = 1;
+    for (int i = static_cast<int>(shape.size()) - 1; i >= 0; --i) {
+        new_strides[i] = stride;
+        stride *= shape[i];
     }
 
     TensorMeta new_meta{this->dtype(), shape, new_strides};

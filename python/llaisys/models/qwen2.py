@@ -152,25 +152,49 @@ class Qwen2:
         tokens = (ctypes.c_int64 * ntokens)(*generated)
 
         '''
-        Prefill
+        KV Cache 
+        '''
+        self.kcache = (llaisysTensor_t * self.num_hidden_layers)()
+        self.vcache = (llaisysTensor_t * self.num_hidden_layers)()
+        shape = (ctypes.c_size_t * 3)(
+            max_new_tokens + len(generated),
+            self.num_key_value_heads,
+            self.kvhead_dimv
+        )
+
+        for i in range(self.num_hidden_layers):
+            self.kcache[i] = LIB_LLAISYS.tensorCreate(shape, 3, self.data_type, self.device, self.device_id)
+            self.vcache[i] = LIB_LLAISYS.tensorCreate(shape, 3, self.data_type, self.device, self.device_id)
+
+        '''
+        Prefilling
         '''
 
         next_token = LIB_LLAISYS.llaisysQwen2ModelInfer(
             self.model,
             tokens,
             ctypes.c_size_t(ntokens),
+            ctypes.cast(self.kcache, ctypes.POINTER(llaisysTensor_t)),
+            ctypes.cast(self.vcache, ctypes.POINTER(llaisysTensor_t)),
+            ctypes.c_size_t(0)
         )
         generated.append(next_token)
+        print("[Llaisys] Prefill done", flush=True)
 
+        '''
+        Decoding
+        '''
         for _ in range(max_new_tokens - 1):
+            past_len = len(generated) - 1
             if next_token == self.eos_token_id:
                 break
-            ntokens = len(generated)
-            tokens = (ctypes.c_int64 * ntokens)(*generated)
             next_token = LIB_LLAISYS.llaisysQwen2ModelInfer(
                 self.model,
-                tokens,
-                ctypes.c_size_t(ntokens),
+                (ctypes.c_int64 * 1)(next_token),
+                ctypes.c_size_t(1),
+                ctypes.cast(self.kcache, ctypes.POINTER(llaisysTensor_t)),
+                ctypes.cast(self.vcache, ctypes.POINTER(llaisysTensor_t)),
+                past_len
             )
             generated.append(next_token)
 

@@ -17,7 +17,10 @@ __C {
         qwen2Model->device = device;
         qwen2Model->ndevice = ndevice;
 
-        ASSERT(meta != nullptr && device_ids != nullptr, "Qwen2ModelCreate: invalid ptr.");
+        if (meta == nullptr || device_ids == nullptr) {
+            fprintf(stderr, "[ERROR] Qwen2ModelCreate: invalid ptr.\n");
+            return nullptr; 
+        }
         qwen2Model->meta = (LlaisysQwen2Meta *)malloc(sizeof(LlaisysQwen2Meta));
         qwen2Model->device_ids = (int *)malloc(sizeof(int) * ndevice);
         qwen2Model->weights = (LlaisysQwen2Weights *)malloc(sizeof(LlaisysQwen2Weights));
@@ -32,7 +35,6 @@ __C {
         qwen2Model->weights->in_embed = tensorCreate(shape_in_embed, 2, meta->dtype, device, device_ids[0]);
         qwen2Model->weights->out_embed = tensorCreate(shape_out_embed, 2, meta->dtype, device, device_ids[0]);
         qwen2Model->weights->out_norm_w = tensorCreate(shape_out_norm_w, 1, meta->dtype, device, device_ids[0]);
-        ASSERT(tensorIsContiguous(qwen2Model->weights->in_embed), "In embed uncontiguous.");
 
         //Create tensor for attn_norm_w, attn_q_w, attn_k_w, attn_v_w, attn_q_b, attn_k_b, attn_v_b, attn_o_w
         auto create_tensor_for_layer_2d = [&](llaisysTensor_t *&ptr, size_t dim0, size_t dim1){
@@ -125,7 +127,7 @@ __C {
         return model->weights;
     }
 
-    int64_t llaisysQwen2ModelInfer(struct LlaisysQwen2Model * model, int64_t * token_ids, size_t ntoken){
+    int64_t llaisysQwen2ModelInfer(struct LlaisysQwen2Model * model, int64_t * token_ids, size_t ntoken, llaisysTensor_t *kcache, llaisysTensor_t *vcache, size_t past_len){
         if(!model || !token_ids || ntoken == 0) return -1;
 
         size_t seq_len = ntoken;
@@ -136,7 +138,7 @@ __C {
         size_t dh = model->meta->dh;
         size_t di = model->meta->di;
         size_t voc = model->meta->voc;
-        float theta = model->meta->theta;
+        float theta = (float)model->meta->theta;
         float epsilon = model->meta->epsilon;
         float scale = 1.0f / sqrt(dh);
 
@@ -158,7 +160,7 @@ __C {
         llaisysTensor_t pos_ids = tensorCreate(pos_id_shape, 1, llaisysDataType_t::LLAISYS_DTYPE_I64, model->device, model->device_ids[0]);
         std::vector<int64_t> tmp_ids(seq_len);
         for(size_t i=0;i<seq_len;i++){
-            tmp_ids[i] = i;
+            tmp_ids[i] = ((int64_t)past_len+(int64_t)i);
         }
         tensorLoad(pos_ids, tmp_ids.data());
 
@@ -169,7 +171,7 @@ __C {
             size_t rms_output_shape[2] = {seq_len, hs};
             llaisysTensor_t rms_output = tensorCreate(rms_output_shape, 2, model->meta->dtype, model->device, model->device_ids[0]);
             llaisysRmsNorm(rms_output, layer_input, model->weights->attn_norm_w[i], epsilon);
-        
+            
             //Linear Q, K, V
             size_t q_shape[2] = {seq_len, nh * dh};
             llaisysTensor_t q = tensorCreate(q_shape, 2, model->meta->dtype, model->device, model->device_ids[0]);
@@ -180,7 +182,10 @@ __C {
             llaisysLinear(k, rms_output, model->weights->attn_k_w[i], model->weights->attn_k_b[i]);
 
             size_t v_shape[2] = {seq_len, nkvh * dh};
-            llaisysTensor_t v = tensorCreate(v_shape, 2, model->meta->dtype, model->device, model->device_ids[0]);
+            //llaisysTensor_t v = tensorCreate(v_shape, 2, model->meta->dtype, model->device, model->device_ids[0]);
+            llaisysTensor_t v = tensorView(tensorSlice(vcache[i], 0, past_len, past_len + seq_len),
+                v_shape, 2);
+
             llaisysLinear(v, rms_output, model->weights->attn_v_w[i], model->weights->attn_v_b[i]);
 
             //RoPE
@@ -188,17 +193,21 @@ __C {
             q = tensorView(q, q_shape_3d, 3);
             size_t k_shape_3d[3] = {seq_len, nkvh, dh};
             k = tensorView(k, k_shape_3d, 3);
-            v = tensorView(v, k_shape_3d, 3);
+            //v = tensorView(v, k_shape_3d, 3);
 
             llaisysTensor_t q_rope = tensorCreate(q_shape_3d, 3, model->meta->dtype, model->device, model->device_ids[0]);
             llaisysROPE(q_rope, q, pos_ids, theta);
 
-            llaisysTensor_t k_rope = tensorCreate(k_shape_3d, 3, model->meta->dtype, model->device, model->device_ids[0]);
+            //llaisysTensor_t k_rope = tensorCreate(k_shape_3d, 3, model->meta->dtype, model->device, model->device_ids[0]);
+            llaisysTensor_t k_rope = tensorSlice(kcache[i], 0, past_len, past_len + seq_len);
+
             llaisysROPE(k_rope, k, pos_ids, theta);
 
             //Self Attention
             size_t attn_shape[3] = {seq_len, nh, dh};
             llaisysTensor_t attn_val = tensorCreate(attn_shape, 3, model->meta->dtype, model->device, model->device_ids[0]);
+            k_rope = tensorSlice(kcache[i], 0, 0, past_len + seq_len);
+            v = tensorSlice(vcache[i], 0, 0, past_len + seq_len);
             llaisysSelfAttention(attn_val, q_rope, k_rope, v, scale);
             size_t attn_shape_2d[2] = {seq_len, nh * dh};
             attn_val = tensorView(attn_val, attn_shape_2d, 2);
@@ -241,10 +250,10 @@ __C {
             llaisysAdd(layer_input, residual_out, mlp_down);
 
             tensorDestroy(q_rope);
-            tensorDestroy(k_rope);
+            // tensorDestroy(k_rope);
             tensorDestroy(q);
             tensorDestroy(k);
-            tensorDestroy(v);
+            // tensorDestroy(v);
             tensorDestroy(attn_val);
             tensorDestroy(attn_out);
             tensorDestroy(residual_out);
@@ -255,7 +264,6 @@ __C {
             tensorDestroy(mlp_down);
             tensorDestroy(rms_output);
         }
-
         //Layer norm
         size_t output_final_shape[2] = {seq_len, hs};
         llaisysTensor_t output_final = tensorCreate(output_final_shape, 2, model->meta->dtype, model->device, model->device_ids[0]);
